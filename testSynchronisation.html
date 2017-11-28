@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+
+<head>
+  <meta charset="utf8">
+  <title>Test eye-tracker</title>
+  <link href="test.css" rel="stylesheet" type="text/css">
+  <!--
+      <script src="http://localhost:6556/eyetribe.js"></script>
+     <script src="http://ajax.googleapis.com/ajax/libs/jquery/1.4.1/jquery.min.js"></script>
+  -->
+
+  <script src="https://d3js.org/d3.v4.min.js"></script>
+  <script src="https://d3js.org/d3-hexbin.v0.2.min.js"></script>
+  <script src="https://code.jquery.com/jquery-3.2.1.min.js"></script>
+  
+</head>
+
+<body>
+  <p>Appuyez sur espace pour arrêter</p>
+  <script>
+
+    var width = $(window).width(), height = $(window).height() ,
+        nbColumns = 55, nbLines = 40, testNumber = 1,
+        radius = 10;
+
+    /* Function called when the user decides to stop gathering data by pressing
+     * the spacebar
+     */
+    function onceStopped(data){
+      console.log("Debut");
+        var testsArray = [], cpt1 = 1, cpt2 = 0, timeDifference,
+          //dataString = data.toString(),
+          //blob = new Blob([data], {type: "text\plain"}),
+
+
+      //#######################################
+      //DONNEES EN VRAC
+      //#######################################
+          dataJson = JSON.stringify(data),
+          blob = new Blob([dataJson], { type: "text\plain" }),
+          url = URL.createObjectURL(blob),
+
+          wrapper = document.createElement("div");
+        a = document.createElement("a"),
+          text = document.createTextNode("Télécharger les données visuelles \"en vrac\"");
+
+        a.setAttribute("href", url);
+        a.setAttribute("download", "visual-data");
+        a.appendChild(text);
+        wrapper.appendChild(a);
+        document.body.appendChild(wrapper);
+
+      //#######################################
+      //DONNEES SPLIT
+      //#######################################
+
+      var dataSplit = [];
+        wrapper2 = document.createElement("div");
+        a2 = document.createElement("a"),
+          text2 = document.createTextNode("Télécharger les données visuelles");
+
+        
+
+      //L'URL et le BLOB se font lors de la récupération de Ligne.JSON
+        a2.setAttribute("download", "visual-data");
+        a2.setAttribute("id", "dataSplit");
+        a2.appendChild(text2);
+        wrapper2.appendChild(a2);
+        document.body.appendChild(wrapper2);
+
+        //document.getElementsByTagName("body").innerHtml += "<a href='"+ url +"' download='visual-data'>Télécharger les données visuelles</a>"
+
+        // Request to get JSON data about READAPT from Advanse server
+        var success = false;
+        $.get('http://advanse.lirmm.fr/READAPT/JSON/Ligne.json', function (serverdata) {
+
+
+          $("<div/>", {
+            "class": "info",
+            text: "Récupération du fichier Ligne.json. "
+          }).appendTo("body");
+
+
+          for (let key in serverdata) {
+            if (!isNaN(key)) {
+              testsArray[key] = serverdata[key];
+            }
+          }
+
+          timeDifference = data[0][2] - serverdata.date;
+
+          var dataArray = [];
+
+          while (cpt1 < testsArray.length) {
+
+            // Compares the timestamps of the visual data and the clicks on READAPT
+            if ((data[cpt2][2] - data[0][2] + timeDifference) >= testsArray[cpt1].debut
+              && data[cpt2][2] - data[0][2] + timeDifference < testsArray[cpt1].fin) {
+              dataArray.push(data[cpt2]);
+            }
+
+            cpt2++;
+
+            /* Once visual data corresponding to one test is in dataArray, calls
+             * the function to draw the heatmap of this test and make the animation
+             * available
+             */
+            if (data[cpt2][2] - data[0][2] + timeDifference >= testsArray[cpt1].fin) {
+              cpt1++;
+			  //Save the data of the current frame
+			  //Vérifier le tableau se forme bien
+              dataSplit[cpt2] = dataArray;
+              drawHeatmap(dataArray);
+              dataArray = [];
+            }
+          }
+
+
+//A TESTER
+          dataSplitJson = JSON.stringify(dataSplit),
+          blob2 = new Blob(dataSplitJson, { type: "text\plain" }),
+          url2 = URL.createObjectURL(blob2),
+          $("#dataSplit").attr("href", url2);
+
+        }
+        ).fail(function () {
+          $("<div/>", {
+            "class": "info",
+            text: "Echec lors de la tentative de récupération du fichier. "
+          }).appendTo("body");
+        });
+
+     }
+	   
+var lineGenerator = d3.line()
+  .x(function(d) {
+	return d[0];
+  })
+  .y(function(d) {
+	return d[1];
+  });
+	 
+function displayLine(data, g, id) {
+console.log(data);
+	if($("#"+id+"Line")[0] !== undefined)
+		return null;
+	var d = lineGenerator(data);
+	console.log(d);
+  var line = g.append("path")
+    .datum(data)
+    .attr("id", id+"Line")
+	.attr("fill", 'none')
+    .attr("stroke", "red")
+	.attr("rendering", "geometricPrecision")
+	.attr("stroke-width", "3px")
+	.attr("d", d)
+	
+	;
+
+  var totalLength = line.node().getTotalLength();
+  console.log(totalLength);
+
+  line.attr("stroke-dasharray", totalLength + " " + totalLength)
+    .attr("stroke-dashoffset", totalLength)
+    .transition()
+	.delay(1000)
+    .duration(15000)
+    .attr("stroke-dashoffset", 0);
+}
+
+ function clearOne(event, path, data){
+	//var d = svg.d;
+	console.log(path);
+	var str = path.getAttribute("d");
+	console.log(str);
+	var lastIndex = str.lastIndexOf(" ");
+	console.log(lastIndex);
+	console.log(data.length);
+	
+	var y = str.substring(lastIndex, str.length);
+	str = str.substring(0, lastIndex);
+	console.log(str);
+	console.log(y);
+  }
+  
+
+  
+  
+     // Draws the heatmap of the visual data
+     function drawHeatmap(data){
+       //document.getElementsByTagName("body").innerHtml += ("<br><center><p>Test n°" + testNumber + "</p></center>");
+       testNumber++;
+		var id = "svg"+testNumber;
+       var svg = d3.select("body").append("svg")
+                             .attr("height", height)
+                             .attr("width", width)
+							 .attr("id", id),
+           g = svg.append("g"),
+
+           /* Colors from yellow to red depending on the amount of gaze points
+           * binned in the hexagons
+           */
+           color = d3.scaleSequential(d3.interpolateLab("yellow", "red"))
+                     .domain([0, 20]),
+
+           hexbin = d3.hexbin()
+                      .radius(radius),
+
+           x = d3.scaleLinear()
+                 .domain([0, width])
+                 .range([0, width]),
+
+           y = d3.scaleLinear()
+                 .domain([0, height])
+                 .range([height, 0]);
+                // console.log(data);
+                // console.log(hexbin(data));
+
+      // Code from tutorial https://bl.ocks.org/mbostock/4248145
+      g.append("clipPath")
+       .attr("id", "clip")
+       .append("rect")
+       .attr("width", width)
+       .attr("height", height);
+
+
+      g.append("g")
+       .attr("class", "hexagon")
+       .attr("clip-path", "url(#clip)")
+       .selectAll("path")
+       .data(hexbin(data))
+       .enter().append("path")
+       .attr("d", hexbin.hexagon())
+       .attr("transform", function(d) { return "translate(" + d.x + "," + d.y + ")"; })
+       .attr("fill", function(d) { return color(d.length); });
+
+      g.append("g")
+       .attr("class", "axis axis--y")
+       .call(d3.axisLeft(y).tickSizeOuter(-width));
+
+      g.append("g")
+       .attr("class", "axis axis--x")
+       .attr("transform", "translate(0," + height + ")")
+       .call(d3.axisBottom(x).tickSizeOuter(-height));
+
+      var circle = svg.append('circle')
+                      .attr('r', 6)
+                      .attr('fill', 'red')
+                      .attr('cx', -70)
+                      .attr('cy', -70),
+
+          i = 0, dataX, dataY, d;
+		  
+		  
+	 var path = svg.append('path')
+				.attr('fill', 'none')
+				.attr('stroke', 'red')
+				.attr('d', d)
+				.attr('stroke-width', 1);
+	
+			console.log("#"+id+" > path");			
+			//console.log($("#"+id+" > path")[0]);
+	
+
+			
+	
+			path = $("#"+id+" > path")[0];
+			console.log("#"+id+" > path");	
+			console.log(path);	
+          button = document.createElement("input");
+          button.setAttribute("type","button");
+          button.onclick = function(){
+
+
+
+            // Function repeated every 200 ms
+            /*
+             * On fera bouger le cercle rouge en même temps que le curseur
+             * supprimer les 3 derniers mots
+             *
+              //SUPPRIME DERNIER MOT 
+               
+              var str = "I want to remove the last word.";
+              var lastIndex = str.lastIndexOf(" ");
+
+              str = str.substring(0, lastIndex);
+             */
+
+			  displayLine(data, g, id);
+            var x = setInterval(function(){
+              dataX = data[i][0];
+              dataY = data[i][1];
+              if(dataX != 0){
+				if(i==0){
+                  d = 'M ' + dataX + ' ' + dataY;
+				  
+                }
+                else{
+                  d += ' L ' + dataX + ' ' + dataY;
+                }
+                circle.transition()
+					  .delay(1000)
+                      .attr('cx', dataX)
+                      .attr('cy', dataY)
+					  .each(function(){
+							//path.setAttribute('d', d);
+						});
+						
+					  /*.on("end", function(){
+							path.setAttribute('d', d);
+						});*/
+
+              }
+
+            i++;
+
+            // Stops the function when i reaches the size of the array
+            if(i == data.length){
+              clearInterval(x); 
+            }
+          }, 200);
+        }
+
+        document.body.appendChild(button);
+        button.value = "Afficher l'animation";
+		
+		var button2 = document.createElement("input");
+          button2.setAttribute("type","button");
+		  button2.addEventListener("click",function(event){
+			clearOne(event, path, data);
+		  });
+        
+		document.body.appendChild(button2);
+		button2.value = "-";
+  } //End of drawHeatmap
+  
+ 
+      var points = [];
+
+      // Loops on each frame
+      EyeTribe.loop(function(frame) {
+        let timestamp = (new Date()).getTime();
+        if(stopped) {
+          console.log("Calling onceStopped");
+          onceStopped(points);
+          stopped = false;
+        }
+        // Adds the points which coordinates are (x,y) to the array points[]
+        if(!stopData){
+          if(frame.getData().raw.x != 0 && frame.getData().raw.y != 0){
+            points.push([frame.getData().raw.x, frame.getData().raw.y-70, timestamp]);
+          }
+        }
+      })
+ 
+      var stopped = false, stopData = false;
+
+      // Function called when the spacebar is pressed
+      window.onkeypress = function(e) {
+        if (e.charCode == 32) { // Spacebar
+          console.log("Pressing " + e.charCode);
+          stopped = true;
+          stopData = true;
+          onceStopped(data);
+        }
+      }
+	  
+	 
+
+  </script>
+  
+  <!--#############################################!-->
+  
+  <script type="text/javascript">
+  var data;
+window.onload = function() {
+    var f = document.getElementById('file'),
+        res = document.getElementById('resultat');
+    f.onchange = function() {
+        var file = f.files[0],
+            fr = new FileReader();
+            
+        fr.onprogress = function() {
+            res.innerHTML = 'Chargement...';
+        };
+        fr.onerror = function() {
+            res.innerHTML = "Une erreur s'est produite...";
+        };
+		//
+        fr.onload = function() {
+            res.innerHTML = '';
+            //res.appendChild(document.createTextNode(fr.result));
+			
+        data = JSON.parse(fr.result);
+       // console.log(data);
+          for(var d in data){
+                drawHeatmap(data[d]);
+          }
+        };
+
+
+       fr.readAsText(file);
+    };
+};
+
+//Vérigier JSON
+//https://jsonformatter.curiousconcept.com
+
+</script>
+ 
+<label for="file">Choisissez un fichier texte</label>
+<input type="file" id="file" />
+ 
+<pre id="resultat"></pre>
+</body>
